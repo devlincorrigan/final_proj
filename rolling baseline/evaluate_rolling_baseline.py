@@ -4,6 +4,7 @@ import argparse
 import csv
 import math
 from collections import Counter, defaultdict
+from datetime import date
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -29,12 +30,31 @@ def parse_args():
         default=0,
         help="If > 0, only evaluate the top N absolute-edge picks per event.",
     )
+    parser.add_argument(
+        "--seasons",
+        nargs="+",
+        default=[],
+        help="Optional season filters like 2023-24 2024-25.",
+    )
     return parser.parse_args()
 
 
 def load_rows(path):
     with open(path, newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
+
+
+def infer_season(game_date_text):
+    game_date = date.fromisoformat(game_date_text)
+    start_year = game_date.year if game_date.month >= 7 else game_date.year - 1
+    return f"{start_year}-{str(start_year + 1)[2:]}"
+
+
+def filter_rows_by_seasons(rows, seasons):
+    if not seasons:
+        return rows
+    season_set = set(seasons)
+    return [row for row in rows if infer_season(row["game_date"]) in season_set]
 
 
 def to_float(row, key):
@@ -359,6 +379,13 @@ def print_edge_buckets(rows, best_n_per_event):
 
 
 def print_slices(rows):
+    print("Rows By Season")
+    for value, count in counts_by_field(
+        [{"season": infer_season(row["game_date"])} for row in rows], "season"
+    ):
+        print(f"{value}: {count}")
+    print()
+
     print("Rows By Window")
     for value, count in counts_by_field(rows, "window"):
         print(f"{value}: {count}")
@@ -372,8 +399,11 @@ def print_slices(rows):
 
 def main():
     args = parse_args()
-    rows = load_rows(args.input)
+    rows = filter_rows_by_seasons(load_rows(args.input), args.seasons)
     print_summary(rows)
+    if args.seasons:
+        print(f"Season Filter: {' '.join(args.seasons)}")
+        print()
     if args.best_n_per_event > 0:
         print(f"Selection Mode: top {args.best_n_per_event} bets per event")
         print()
