@@ -156,6 +156,12 @@ def safe_int(value):
     return int(float(value))
 
 
+def safe_float(value, default=0.0):
+    if value in (None, ""):
+        return default
+    return float(value)
+
+
 def bookmaker_title(bookmaker):
     if bookmaker.get("key") == "williamhill_us":
         return "Caesars"
@@ -174,7 +180,14 @@ def load_players(players_path):
         for row in reader:
             game_id = canonical_game_id(row["gameId"])
             game_date = date.fromisoformat(row["gameDate"])
+            minutes_float = safe_float(row.get("minutesFloat"))
             player_name = f'{row["firstName"]} {row["familyName"]}'.strip()
+
+            game_dates[game_id] = game_date
+
+            if minutes_float < 1.0:
+                continue
+
             record = PlayerGame(
                 game_id=game_id,
                 game_date=game_date,
@@ -183,7 +196,6 @@ def load_players(players_path):
                 points=safe_int(row["points"]),
             )
 
-            game_dates[game_id] = game_date
             roster_rows[game_id].append(record)
             histories[record.person_id].append(record)
 
