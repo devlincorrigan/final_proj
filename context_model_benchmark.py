@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# rolling model with context-based adjustment
 
 import argparse
 import math
@@ -10,11 +11,10 @@ import pandas as pd
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 DEFAULT_CONFIG = {
-    "baseline_csv": str(SCRIPT_DIR / "rolling baseline/rolling_baseline.csv"),
+    "baseline_csv": str(SCRIPT_DIR / "rolling_baseline/rolling_baseline.csv"),
     "players_csv": str(SCRIPT_DIR / "data/box_scores/players.csv"),
     "teams_csv": str(SCRIPT_DIR / "data/box_scores/teams.csv"),
-    "train_seasons": ["2023-24", "2024-25"],
-    "test_seasons": ["2025-26"],
+    "split_ratios": [0.7, 0.3],
     "best_n_per_event": 1,
     "team_window": 20,
     "player_points_window": 40,
@@ -42,16 +42,12 @@ def parse_args():
         help="Box score teams CSV path.",
     )
     parser.add_argument(
-        "--train-seasons",
-        nargs="+",
-        default=DEFAULT_CONFIG["train_seasons"],
-        help="Seasons used to fit the context model.",
-    )
-    parser.add_argument(
-        "--test-seasons",
-        nargs="+",
-        default=DEFAULT_CONFIG["test_seasons"],
-        help="Seasons used as holdout evaluation.",
+        "--split-ratios",
+        nargs=2,
+        type=float,
+        default=DEFAULT_CONFIG["split_ratios"],
+        metavar=("TRAIN_RATIO", "TEST_RATIO"),
+        help="Chronological train/test split ratios, e.g. --split-ratios 0.7 0.3.",
     )
     parser.add_argument(
         "--best-n-per-event",
@@ -131,6 +127,7 @@ def build_context_rows(players_csv, teams_csv, team_window, player_points_window
 
     players["minutes_float"] = players["minutes"].map(parse_minutes)
     players["isHomeInt"] = players["isHome"].astype(int)
+    players = players[players["minutes_float"] >= 1.0].copy()
 
     teams = teams.sort_values(["teamId", "gameDate", "gameId"]).copy()
     teams["opp_defensive_rating_roll"] = (
@@ -240,6 +237,26 @@ def fit_context_model(train_df, feature_cols):
     return coefficients, feature_means, feature_stds
 
 
+def chronological_split(df, split_ratios):
+    train_ratio, test_ratio = split_ratios
+    if train_ratio <= 0 or test_ratio <= 0:
+        raise ValueError("Split ratios must be positive.")
+
+    ordered = df.sort_values(["game_date", "game_id", "event_id", "person_id"]).copy()
+    total_ratio = train_ratio + test_ratio
+    train_fraction = train_ratio / total_ratio
+    split_index = int(len(ordered) * train_fraction)
+
+    if split_index <= 0 or split_index >= len(ordered):
+        raise ValueError(
+            "Chronological split produced an empty train or test set; adjust --split-ratios."
+        )
+
+    train_df = ordered.iloc[:split_index].copy()
+    test_df = ordered.iloc[split_index:].copy()
+    return train_df, test_df
+
+
 def apply_context_model(df, feature_cols, coefficients, feature_means, feature_stds):
     scored = df.copy()
     X = scored[feature_cols].astype(float).to_numpy()
@@ -291,9 +308,7 @@ def main():
         "isHomeInt",
     ]
     model_df = joined.dropna(subset=feature_cols).copy()
-
-    train_df = model_df[model_df["season"].isin(args.train_seasons)].copy()
-    test_df = model_df[model_df["season"].isin(args.test_seasons)].copy()
+    train_df, test_df = chronological_split(model_df, args.split_ratios)
 
     coefficients, feature_means, feature_stds = fit_context_model(train_df, feature_cols)
 
@@ -305,6 +320,14 @@ def main():
     print(f"  joined_usable_rows={len(model_df)}")
     print(f"  train_rows={len(train_df)}")
     print(f"  test_rows={len(test_df)}")
+    print(
+        f"  train_date_range={train_df['game_date'].min().date()} to "
+        f"{train_df['game_date'].max().date()}"
+    )
+    print(
+        f"  test_date_range={test_df['game_date'].min().date()} to "
+        f"{test_df['game_date'].max().date()}"
+    )
     print()
 
     print("Coefficients")
@@ -328,8 +351,14 @@ def main():
         )
 
         print(split_name)
-        print_metrics("  Rolling baseline", baseline_metrics)
-        print_metrics("  Context-adjusted", context_metrics)
+        print_metrics(
+            f"  Rolling baseline (selected rows are top {args.best_n_per_event} lines per event)",
+            baseline_metrics,
+        )
+        print_metrics(
+            f"  Context-adjusted (selected rows are top {args.best_n_per_event} lines per event)",
+            context_metrics,
+        )
         print()
 
 

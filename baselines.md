@@ -94,4 +94,31 @@ FanDuel: 306
 Fanatics: 5
 PointsBet (US): 3
 
-devlincorrigan@MacBookAir final_project %
+# python3 context_model_benchmark.py
+Rows
+  baseline_rows=31162
+  joined_usable_rows=31162
+  train_rows=21813
+  test_rows=9349
+  train_date_range=2023-10-24 to 2025-12-09
+  test_date_range=2025-12-09 to 2026-04-12
+
+Coefficients
+  intercept=0.319314
+  opp_defensive_rating_roll=0.313335
+  opp_pace_roll=0.236162
+  player_minutes_roll=-0.390857
+  player_usage_roll=-0.124192
+  isHomeInt=0.108167
+
+Train
+  Rolling baseline (selected rows are top 1 lines per event)
+  selected_rows=2716 events=2716 correct=1443 accuracy=53.13% profit=-20.510 roi=-0.76%
+  Context-adjusted
+  selected_rows=2716 events=2716 correct=1475 accuracy=54.31% profit=33.100 roi=1.22%
+
+Test
+  Rolling baseline (selected rows are top 1 lines per event)
+  selected_rows=843 events=843 correct=452 accuracy=53.62% profit=1.500 roi=0.18%
+  Context-adjusted
+  selected_rows=843 events=843 correct=455 accuracy=53.97% profit=6.770 roi=0.80%

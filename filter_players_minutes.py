@@ -13,7 +13,7 @@ DEFAULT_OUTPUT_CSV = SCRIPT_DIR / "data/box_scores/players_filtered.csv"
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Filter player box scores down to rows with positive minutes played."
+        description="Filter player box scores down to rows with at least 1 minute played."
     )
     parser.add_argument(
         "--input-csv",
@@ -64,14 +64,14 @@ def parse_minutes_text(value):
     return parsed
 
 
-def played_positive_minutes(row):
+def played_at_least_one_minute(row):
     minutes_float = parse_minutes_float(row.get("minutesFloat"))
     if minutes_float is not None:
-        return minutes_float > 0
+        return minutes_float >= 1
 
     minutes_text = parse_minutes_text(row.get("minutes"))
     if minutes_text is not None:
-        return minutes_text > 0
+        return minutes_text >= 1
 
     return False
 
@@ -97,7 +97,7 @@ def main():
 
             for row in reader:
                 total_rows += 1
-                if played_positive_minutes(row):
+                if played_at_least_one_minute(row):
                     writer.writerow(row)
                     kept_rows += 1
 
